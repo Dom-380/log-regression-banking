@@ -14,6 +14,4 @@ Hi there! This repository contains an R-based project that applies logistic regr
 - Visualized results with `ggplot2` and `ggeffects` for interpretability
 
 ### 📁 Dataset
-This analysis uses a publicly available **Bank Marketing** dataset from [UCI Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/bank+marketing) (or update this if from another source).  
-Please download the CSV and place it in the `/data` folder to reproduce results.
-
+I've included the dataset (bank-additional-full.csv) in this repository. Feel free to download the repo and use it in R to explore, analyze, or reproduce the logistic regression results.
