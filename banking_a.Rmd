@@ -1,0 +1,238 @@
+---
+title: "banking_a"
+author: "Dominick Augimeri"
+date: "2025-04-24"
+output: html_document
+---
+
+```{r setup, include=FALSE, error=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Set working directory
+setwd("~/1. Data_330 stats_research/wk_14_log_margins")
+
+#Load libraries
+library(readr)
+library(ggeffects)
+library(ggplot2)
+```
+
+
+# 1. Setup:
+
+* Read in raw data and replace semicolons with commas for delimeter uniformity
+
+* Read in csv file as bank_data
+```{r}
+#Read the raw file
+raw_data <- read_file("bank-additional-full.csv")
+
+#Replace semicolons with commas
+cleaned_data <- gsub(";", ",", raw_data)
+
+#Write the cleaned file back to a new CSV
+write_file(cleaned_data, "cleaned_file.csv")
+
+#Load the cleaned file
+bank_data <- read_csv("cleaned_file.csv")
+
+```
+
+# 2. Binarize Target and Convert Categorical Variable to Factors
+```{r}
+#Create 'y' target to binary 
+bank_data$y_bin <- ifelse(bank_data$y == 'yes', 1, 0)
+
+#Convert character variables to factors
+categorical_vars <- c("job", "marital", "education", "default", "housing", 
+                      "loan", "contact", "month", "day_of_week", "poutcome")
+bank_data[categorical_vars] <- lapply(bank_data[categorical_vars], factor)
+
+#Coding numeric pdays data in a binary fashion
+bank_data$pdays_cat <- ifelse(bank_data$pdays == 999, "never", "recent")
+
+#Making the pdays_cat column a factor for use in the logistic model
+bank_data$pdays_cat <- factor(bank_data$pdays_cat)
+```
+
+
+# 3. Logistic Model: Focus --> Education, Pdays, Month
+
+* Include all categorical variables in model to possibly control for confounding effects with later visualizations.
+
+* The first focus is on education seems to convey the message that the university degree and unknown education categories have statistical significance (both below an alpha = 0.05). Holding all other factors constant the logs odds are similar for each education level at approximately 0.23. The coefficients are positive indicating greater log odds of each education facet.
+
+* The 'pdays' category seems to be very significant (p=0). Since the coefficients is negative (-0.0017) there is a decrease in customer subscription with log odds of 0.00017 for every one day increase in number of days since a customer was last contacted.
+
+* All months except June display statistical significance (p=0). Prime months for signups include March, October, December, and September as they all contain positive coefficients, which will be exponentiated for easier interpretability.  
+```{r}
+#Run logistic model upon the categorical variables in the data set 
+model <- glm(y_bin ~ education + pdays + age + campaign + job + contact + month + poutcome,
+             data = bank_data, family = "binomial")
+
+summary(model)
+```
+
+# 4. Exponentiated Coefficients (Education, Pdays, Month):
+
+* The exponentiated odds for the statistically significant education metrics seem to indicate that individuals with a university degree are 25% more likely to subscribe and those with an unknown status 26% more likely. If we were to interpret the other non-statistical significant factors is appears that those with a lower education status (6y, 9y, high school, professional course) are less likely to sign up (< 25%) when compared to our higher/unknown education metrics. Curiously it appears that the lowest education factor of illiterate individuals are 172% more likely to subscribe. Perhaps this is due their small size in the data set.
+
+* There is a small odds decrease of 0.17% for pdays based on our exponentiated chart. Although this is small, it does indicate that longer time periods since last contacting a potential customer result in less likely subscriptions.
+
+* Seasonal trends can be interpreted for the month metric from our exponentiated coefficients as well. It seems that the peak month for successful sign ups seem to be March (227%), September (84%), October (117%), and December (146%). The holiday season can be seen as a possible explanation for most of the fall/winter months (except for November), however, our spring time month of March houses are largest likelihood of subscribing. Perhaps tax season, spring and bounce back from the post-holiday slump may explain some of this.
+```{r}
+#Exponentiate the cofficients from the model
+exp(coef(model))
+```
+
+# 5. Education Probability Visualization:
+
+* The original model log odds are now scaled from 0 to 1 by the ggpredict function for easier interpretability. 
+
+* From the transformed probabilities we can still see that university/unknown/illiterate categories display the greatest likelihood for subscription. 
+```{r}
+#Extract predicted probabilities for education
+edu_preds <- ggpredict(model, terms = "education")
+
+#Create education probability visualization
+plot(edu_preds) +
+  labs(
+    title = "Predicted Probability of Subscription by Education",
+    x = "Education Level",
+    y = "Predicted Probability (%)"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", color = 'green4'),  
+    axis.title.x = element_text(size = 10, face = "bold", color = 'blue'),  
+    axis.title.y = element_text(size = 10, face = "bold", color = 'red'), 
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    
+    plot.background = element_rect(fill = "paleturquoise1", color = NA),   # entire plot area
+    panel.background = element_rect(fill = "white", color = NA)   # area behind the chart
+  )
+      
+```
+
+# 6. Pdays Probablity Visualization:
+
+* From the data documentation it seems that pdays with a coding of '999' were used to represent individuals who were never contacted. Most of the data set seems to be comprised of these people, and those who were contacted displayed a low number of days (<20) since last contact.
+
+* The transformed probabilities (0-1) from the chart seem to indicate that there is quite a significant likelihood of subscription if any contact is made (58%) versus no contact.
+```{r}
+#Second logistic model with binarized pdays metric
+model_2 <- glm(y_bin ~ pdays_cat + age + campaign + contact + month + poutcome,
+              data = bank_data, family = "binomial")
+
+#Extract pdays probablities 
+pdays_cat_preds <- ggpredict(model_2, terms = "pdays_cat")
+
+#pdays visualization
+plot(pdays_cat_preds) +
+  labs(title = "Predicted Probability of Subscription by Contact History",
+       x = "Contact Status", y = "Predicted Probability (%)") +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", color = 'green4'),  
+    axis.title.x = element_text(size = 10, face = "bold", color = 'blue'),  
+    axis.title.y = element_text(size = 10, face = "bold", color = 'red'), 
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    
+    plot.background = element_rect(fill = "paleturquoise1", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+```
+
+# 7.  Months Probablity Visualization:
+
+* The transformed probabilities here seem to solidify that notion that the best season for subscriptions seems to be fall/winter (September/October/December) and perhaps part of spring (March) which all display a greater than 30% likihood for sign ups. 
+
+```{r}
+#Extract predicted probabilities for each month
+month_preds <- ggpredict(model_2, terms = "month")
+
+#Month prob Visualization
+plot(month_preds) +
+  labs(title = "Predicted Probability of Subscription by Month",
+       x = "Month", y = "Predicted Probability (%)") +
+   theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", color = 'green4'),  
+    axis.title.x = element_text(size = 10, face = "bold", color = 'blue'),  
+    axis.title.y = element_text(size = 10, face = "bold", color = 'red'), 
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    
+    plot.background = element_rect(fill = "paleturquoise1", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)  
+  )
+```
+
+# 8. Exploring Further Metrics (contact/day_of_week/housing/default):
+
+* Upon exploration of sample size it appears the previously highlighted metric probabilities may have been enhanced due to small sample size. The more balanced factors of contact, day of the week, housing and default will be used to further explore the profile of a potential subscription customer.
+
+```{r}
+#Checking for sample size of all significant factors which were highlighted in the data visualizations
+table(bank_data$education)
+table(bank_data$pdays_cat)
+table(bank_data$month)
+
+#Explore the sample sizes of unused metrics
+table(bank_data$job)
+table(bank_data$marital)
+table(bank_data$default)
+table(bank_data$housing)
+table(bank_data$loan)
+table(bank_data$contact)
+table(bank_data$day_of_week)
+table(bank_data$poutcome)
+```
+
+* It seems as though cellular contact methods, enacted on Tuesday/Wednesday/Thursday, on either home owners/non-home owners, who are not loan defaulters would result in a higher liklihood of subscription sign ups.
+
+```{r}
+#Run 3rd model with added metrics
+model_3 <- glm(y_bin ~ pdays_cat + age + day_of_week + housing + default + campaign + contact + month + poutcome,
+              data = bank_data, family = "binomial")
+
+#Extract predicted probabilities for each month
+contact_preds <- ggpredict(model_3, terms = "contact")
+
+day_preds <- ggpredict(model_3, terms = "day_of_week")
+
+housing_preds <- ggpredict(model_3, terms = "housing")
+
+default_preds <- ggpredict(model_3, terms = "default")
+
+#contact prob Visualization
+plot(contact_preds) +
+  labs(title = "Predicted Probability of Subscription by Month",
+       x = "Contact Method", y = "Predicted Probability (%)") +
+  theme_minimal()
+
+#day prob Visualization
+plot(day_preds) +
+  labs(title = "Predicted Probability of Subscription by Month",
+       x = "Day of the Week", y = "Predicted Probability (%)") +
+  theme_minimal()
+
+#housing prob Visualization
+plot(housing_preds) +
+  labs(title = "Predicted Probability of Subscription by Month",
+       x = "Housing Status", y = "Predicted Probability (%)") +
+  theme_minimal()
+
+#default prob Visualization
+plot(default_preds) +
+  labs(title = "Predicted Probability of Subscription by Month",
+       x = "Default Status", y = "Predicted Probability (%)") +
+  theme_minimal()
+  
+```
+
+# Conclusion:
+
+* When utilizing logistic regression, exponentiation and transforming probabilities via 0-1 scale, it would appear that customers with a university/unknown/illiterate status, those who were contacted via marketing campaign and very active sign up months of March/September/October/December would be the seemingly 'secret recipe' to garner more subscriptions.
+
+* If we explore sample size, however, we can clearly see that all these metrics appear to have a small sample size relative to their neighbors, except for university degree. This is most likely enhanced their perceived effects as a whole. 
+
+* I decided to further explore factors that had a more balanced sample size which included, contact/day_of_week/housing/default. It appears as though these metrics displayed probability enhancements highlighted above (except for housing status)
+
+* Further analysis via alternative methods (not known/used for this assignment) would be needed to create a more accurate profile of a targeted customer groups
